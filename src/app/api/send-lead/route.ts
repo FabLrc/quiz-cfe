@@ -1,12 +1,22 @@
 import { NextResponse } from "next/server";
-import { Resend } from "resend";
+import nodemailer from "nodemailer";
 import { QUESTIONS } from "@/config/questions";
 import type { ContactFormData } from "@/types/quiz";
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+// Configuration du transporteur SMTP
+const transporter = nodemailer.createTransport({
+  host: process.env.SMTP_HOST,
+  port: parseInt(process.env.SMTP_PORT || "587"),
+  secure: process.env.SMTP_SECURE === "true", // true pour port 465, false pour autres ports
+  auth: {
+    user: process.env.SMTP_USER,
+    pass: process.env.SMTP_PASSWORD,
+  },
+});
 
 const AGENCY_EMAIL = process.env.AGENCY_EMAIL || "contact@cf-evolution.com";
-const FROM_EMAIL = process.env.FROM_EMAIL || "onboarding@resend.dev";
+const FROM_EMAIL = process.env.FROM_EMAIL || "noreply@cf-evolution.com";
+const FROM_NAME = process.env.FROM_NAME || "CF Evolution";
 
 interface QuizAnswers {
   [key: string]: string | string[] | ContactFormData;
@@ -185,16 +195,16 @@ export async function POST(request: Request) {
     }
 
     // Envoi email à l'agence
-    await resend.emails.send({
-      from: FROM_EMAIL,
+    await transporter.sendMail({
+      from: `"${FROM_NAME}" <${FROM_EMAIL}>`,
       to: AGENCY_EMAIL,
       subject: `🚀 Nouvelle demande de ${contactData.firstName} ${contactData.lastName}`,
       html: formatAnswersForEmail(answers),
     });
 
     // Envoi email de confirmation au client
-    await resend.emails.send({
-      from: FROM_EMAIL,
+    await transporter.sendMail({
+      from: `"${FROM_NAME}" <${FROM_EMAIL}>`,
       to: contactData.email,
       subject: "Votre demande a bien été reçue - CF Evolution",
       html: generateClientConfirmationEmail(contactData),

@@ -1,5 +1,5 @@
 export interface QuizAnswers {
-  [questionId: string]: string | string[] | ContactFormData;
+  [questionId: string]: string | string[] | ContactFormData | number;
 }
 
 export interface ContactFormData {
@@ -19,7 +19,7 @@ export interface QuizState {
 }
 
 export type QuizAction =
-  | { type: "SET_ANSWER"; questionId: string; answer: string | string[] | ContactFormData }
+  | { type: "SET_ANSWER"; questionId: string; answer: string | string[] | ContactFormData | number }
   | { type: "NEXT_STEP" }
   | { type: "PREVIOUS_STEP" }
   | { type: "GO_TO_STEP"; step: number }

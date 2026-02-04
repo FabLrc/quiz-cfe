@@ -1,6 +1,7 @@
 "use client";
 
 import { motion, AnimatePresence } from "framer-motion";
+import { useRef } from "react";
 import { useQuiz } from "@/hooks/useQuiz";
 import {
   ProgressLine,
@@ -8,6 +9,7 @@ import {
   NavigationButtons,
   ContactForm,
   SuccessScreen,
+  RangeSlider,
 } from "@/components/ui";
 import type { ContactFormData } from "@/types/quiz";
 
@@ -45,7 +47,18 @@ export function QuizContainer() {
     reset,
   } = useQuiz();
 
+  const contactRef = useRef<import("@/components/ui/ContactForm").ContactFormHandle | null>(null);
+
   const handleNext = async () => {
+    // If current question is contact, run UI validation before proceeding
+    if (currentQuestion.type === "contact") {
+      const contactHandle = contactRef.current;
+      if (contactHandle) {
+        const valid = contactHandle.validate();
+        if (!valid) return;
+      }
+    }
+
     if (!canProceed()) return;
 
     if (isLastStep) {
@@ -114,9 +127,20 @@ export function QuizContainer() {
           {/* Options ou formulaire */}
           {currentQuestion.type === "contact" && currentQuestion.fields ? (
             <ContactForm
+              ref={contactRef}
               fields={currentQuestion.fields}
               value={(answers[currentQuestion.id] as ContactFormData) || {}}
               onChange={(data) => setAnswer(data)}
+            />
+          ) : currentQuestion.type === "range" && currentQuestion.rangeConfig ? (
+            <RangeSlider
+              min={currentQuestion.rangeConfig.min}
+              max={currentQuestion.rangeConfig.max}
+              step={currentQuestion.rangeConfig.step}
+              minLabel={currentQuestion.rangeConfig.minLabel}
+              maxLabel={currentQuestion.rangeConfig.maxLabel}
+              value={(answers[currentQuestion.id] as number) || currentQuestion.rangeConfig.min}
+              onChange={(value) => setAnswer(value)}
             />
           ) : (
             <div

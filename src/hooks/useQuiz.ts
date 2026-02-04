@@ -64,56 +64,77 @@ function quizReducer(state: QuizState, action: QuizAction): QuizState {
 export function useQuiz() {
   const [state, dispatch] = useReducer(quizReducer, initialState);
 
-  const currentQuestion = useMemo(
-    () => QUESTIONS[state.currentStep],
-    [state.currentStep]
-  );
-
-  const progress = useMemo(
-    () => ((state.currentStep + 1) / TOTAL_STEPS) * 100,
-    [state.currentStep]
-  );
-
   const isFirstStep = state.currentStep === 0;
-  const isLastStep = state.currentStep === TOTAL_STEPS - 1;
+
+  // Compute visible questions based on `dependsOn` rules in config.
+  const visibleQuestions = useMemo(() => {
+    const visible: typeof QUESTIONS = [];
+
+    for (const q of QUESTIONS) {
+      if (!q.dependsOn || q.dependsOn.length === 0) {
+        visible.push(q);
+        continue;
+      }
+
+      // Include question if at least one dependency is satisfied
+      const satisfied = q.dependsOn.some((dep) => {
+        const ans = state.answers[dep.questionId];
+        if (ans === undefined) return false;
+        if (Array.isArray(ans)) return ans.some((a) => dep.values.includes(String(a)));
+        return dep.values.includes(String(ans));
+      });
+
+      if (satisfied) visible.push(q);
+    }
+
+    return visible;
+  }, [state.answers]);
 
   const setAnswer = useCallback(
-    (answer: string | string[] | ContactFormData) => {
+    (answer: string | string[] | ContactFormData | number) => {
       dispatch({
         type: "SET_ANSWER",
-        questionId: currentQuestion.id,
+        questionId: (visibleQuestions[state.currentStep] ?? QUESTIONS[state.currentStep]).id,
         answer,
       });
     },
-    [currentQuestion.id]
+    [state.currentStep, visibleQuestions]
   );
 
   const nextStep = useCallback(() => {
-    dispatch({ type: "NEXT_STEP" });
-  }, []);
+    const max = Math.max(visibleQuestions.length - 1, 0);
+    const next = Math.min(state.currentStep + 1, max);
+    dispatch({ type: "GO_TO_STEP", step: next });
+  }, [state.currentStep, visibleQuestions.length]);
 
   const previousStep = useCallback(() => {
-    dispatch({ type: "PREVIOUS_STEP" });
-  }, []);
+    const prev = Math.max(state.currentStep - 1, 0);
+    dispatch({ type: "GO_TO_STEP", step: prev });
+  }, [state.currentStep]);
 
   const goToStep = useCallback((step: number) => {
     dispatch({ type: "GO_TO_STEP", step });
   }, []);
 
   const canProceed = useCallback(() => {
-    const answer = state.answers[currentQuestion.id];
+    const q = visibleQuestions[state.currentStep] ?? QUESTIONS[state.currentStep];
+    const answer = state.answers[q.id];
 
-    if (!currentQuestion.required) return true;
+    if (!q.required) return true;
 
-    if (currentQuestion.type === "contact") {
+    if (q.type === "contact") {
       const contactData = answer as ContactFormData | undefined;
       if (!contactData) return false;
 
-      const requiredFields = currentQuestion.fields?.filter((f) => f.required) ?? [];
+      const requiredFields = q.fields?.filter((f) => f.required) ?? [];
       return requiredFields.every((field) => {
         const value = contactData[field.id as keyof ContactFormData];
         return value && String(value).trim().length > 0;
       });
+    }
+
+    if (q.type === "range") {
+      return answer !== undefined && answer !== null && typeof answer === "number";
     }
 
     if (Array.isArray(answer)) {
@@ -121,7 +142,7 @@ export function useQuiz() {
     }
 
     return answer !== undefined && answer !== "";
-  }, [state.answers, currentQuestion]);
+  }, [state.answers, state.currentStep, visibleQuestions]);
 
   const submitQuiz = useCallback(async (): Promise<boolean> => {
     dispatch({ type: "SET_SUBMITTING", isSubmitting: true });
@@ -156,11 +177,12 @@ export function useQuiz() {
     answers: state.answers as QuizAnswers,
     isSubmitting: state.isSubmitting,
     isComplete: state.isComplete,
-    currentQuestion,
-    progress,
+    // visible flow
+    currentQuestion: visibleQuestions[state.currentStep],
+    progress: ((state.currentStep + 1) / Math.max(visibleQuestions.length, 1)) * 100,
     isFirstStep,
-    isLastStep,
-    totalSteps: TOTAL_STEPS,
+    isLastStep: state.currentStep === Math.max(visibleQuestions.length - 1, 0),
+    totalSteps: visibleQuestions.length,
 
     // Actions
     setAnswer,
